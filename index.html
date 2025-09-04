@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Task Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f3f4f6;
+      color: #1f2937;
+    }
+    .task-card {
+      background-color: #ffffff;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+<body class="p-4 flex flex-col items-center min-h-screen">
+
+  <main class="w-full max-w-2xl">
+    <h1 class="text-3xl font-bold text-center mb-6 text-gray-800">My AI Task Manager</h1>
+    
+    <!-- Button to open the task form -->
+    <button id="open-task-form-btn" class="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg shadow-md hover:bg-indigo-700 transition duration-300 mb-6">Add New Task</button>
+    
+    <!-- The Task Form -->
+    <form id="task-form" class="hidden fixed inset-0 flex items-center justify-center p-4 bg-gray-900 bg-opacity-75 z-50">
+      <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+        <h2 class="text-2xl font-bold mb-4 text-center">Add or Update Task</h2>
+        <div class="mb-4">
+          <label for="title-input" class="block text-sm font-medium text-gray-700">Title</label>
+          <input type="text" id="title-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border">
+        </div>
+        <div class="mb-4">
+          <label for="date-input" class="block text-sm font-medium text-gray-700">Date</label>
+          <input type="date" id="date-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border">
+        </div>
+        <div class="mb-4">
+          <label for="description-input" class="block text-sm font-medium text-gray-700">Description</label>
+          <textarea id="description-input" rows="4" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border"></textarea>
+        </div>
+        
+        <!-- New AI button -->
+        <button type="button" id="ai-generate-btn" class="w-full px-4 py-2 bg-purple-600 text-white rounded-lg shadow-md hover:bg-purple-700 transition duration-300 mb-4">
+          Generate with AI
+        </button>
+
+        <div class="flex space-x-2">
+          <button type="submit" id="add-or-update-task-btn" class="w-1/2 px-4 py-2 bg-green-600 text-white rounded-lg shadow-md hover:bg-green-700 transition duration-300">
+            Add Task
+          </button>
+          <button type="button" id="close-task-form-btn" class="w-1/2 px-4 py-2 bg-red-600 text-white rounded-lg shadow-md hover:bg-red-700 transition duration-300">
+            Close
+          </button>
+        </div>
+      </div>
+    </form>
+    
+    <!-- Confirmation Dialog -->
+    <dialog id="confirm-close-dialog" class="rounded-lg shadow-xl p-6">
+      <p class="mb-4">Are you sure you want to close this form?</p>
+      <div class="flex justify-end space-x-2">
+        <button id="discard-btn" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition duration-300">Discard</button>
+        <button id="cancel-btn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition duration-300">Cancel</button>
+      </div>
+    </dialog>
+
+    <div id="tasks-container" class="space-y-4"></div>
+  </main>
+
+  <script>
+    const taskForm = document.getElementById("task-form");
+    const confirmCloseDialog = document.getElementById("confirm-close-dialog");
+    const openTaskFormBtn = document.getElementById("open-task-form-btn");
+    const closeTaskFormBtn = document.getElementById("close-task-form-btn");
+    const addOrUpdateTaskBtn = document.getElementById("add-or-update-task-btn");
+    const cancelBtn = document.getElementById("cancel-btn");
+    const discardBtn = document.getElementById("discard-btn");
+    const tasksContainer = document.getElementById("tasks-container");
+    const titleInput = document.getElementById("title-input");
+    const dateInput = document.getElementById("date-input");
+    const descriptionInput = document.getElementById("description-input");
+    const aiGenerateBtn = document.getElementById("ai-generate-btn");
+
+    const taskData = JSON.parse(localStorage.getItem("data")) || [];
+    let currentTask = {};
+
+    const removeSpecialChars = (val) => {
+      return val.trim().replace(/[^A-Za-z0-9\-\s]/g, '');
+    };
+    
+    // Function to call the LLM and generate a description
+    const generateDescription = async () => {
+      const title = titleInput.value.trim();
+      if (!title) {
+        // In a full application, you would use a custom modal for this.
+        return;
+      }
+    
+      aiGenerateBtn.disabled = true;
+      aiGenerateBtn.innerText = "Generating...";
+    
+      try {
+        const payload = {
+            model: "model-id-from-lm-studio", // Replace this with the actual model ID from LM Studio
+            messages: [
+                { role: "system", content: "You are a professional project manager. Write a concise, single-paragraph task description based on the provided title. Do not add any extra conversational text." },
+                { role: "user", content: `Write a short, professional task description for a task with the title: "${title}".` }
+            ],
+            stream: false,
+        };
+        const apiUrl = `http://localhost:1234/v1/chat/completions`; // LM Studio's default API endpoint
+
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        const result = await response.json();
+        const generatedText = result?.choices?.[0]?.message?.content;
+    
+        if (generatedText) {
+          descriptionInput.value = generatedText.trim();
+        } else {
+          // In a full application, you would use a custom modal for this.
+          console.error("Could not generate a description. Please try again.");
+        }
+      } catch (error) {
+        console.error("Error generating description:", error);
+        // In a full application, you would use a custom modal for this.
+        console.error("An error occurred while generating the description.");
+      } finally {
+        aiGenerateBtn.disabled = false;
+        aiGenerateBtn.innerText = "Generate with AI";
+      }
+    };
+    
+    const addOrUpdateTask = () => {
+      if(!titleInput.value.trim()){
+        // I have removed the alert here as per instructions not to use alert().
+        // In a full application, you would use a custom modal for this.
+        return;
+      }
+      const dataArrIndex = taskData.findIndex((item) => item.id === currentTask.id);
+      const taskObj = {
+        id: `${removeSpecialChars(titleInput.value).toLowerCase().split(" ").join("-")}-${Date.now()}`,
+        title: titleInput.value,
+        date: dateInput.value,
+        description: descriptionInput.value,
+      };
+
+      if (dataArrIndex === -1) {
+        taskData.unshift(taskObj);
+      } else {
+        taskData[dataArrIndex] = taskObj;
+      }
+
+      localStorage.setItem("data", JSON.stringify(taskData));
+      updateTaskContainer();
+      reset();
+    };
+
+    const updateTaskContainer = () => {
+      tasksContainer.innerHTML = "";
+
+      taskData.forEach(({ id, title, date, description }) => {
+        tasksContainer.innerHTML += `
+          <div class="task-card" id="${id}">
+            <p class="task-title"><strong>Title:</strong> ${title}</p>
+            <p class="task-date"><strong>Date:</strong> ${date}</p>
+            <p class="task-description"><strong>Description:</strong> ${description}</p>
+            <button onclick="editTask(this)" type="button" class="btn px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition duration-300">Edit</button>
+            <button onclick="deleteTask(this)" type="button" class="btn px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition duration-300">Delete</button> 
+          </div>
+        `;
+      });
+    };
+
+    const deleteTask = (buttonEl) => {
+      const dataArrIndex = taskData.findIndex((item) => item.id === buttonEl.parentElement.id);
+      
+      buttonEl.parentElement.remove();
+      taskData.splice(dataArrIndex, 1);
+      localStorage.setItem("data", JSON.stringify(taskData));
+    };
+
+    const editTask = (buttonEl) => {
+      const dataArrIndex = taskData.findIndex((item) => item.id === buttonEl.parentElement.id);
+      currentTask = taskData[dataArrIndex];
+
+      titleInput.value = currentTask.title;
+      dateInput.value = currentTask.date;
+      descriptionInput.value = currentTask.description;
+
+      addOrUpdateTaskBtn.innerText = "Update Task";
+      taskForm.classList.remove("hidden");
+    };
+
+    const reset = () => {
+      addOrUpdateTaskBtn.innerText = "Add Task";
+      titleInput.value = "";
+      dateInput.value = "";
+      descriptionInput.value = "";
+      taskForm.classList.add("hidden");
+      currentTask = {};
+    };
+
+    if (taskData.length) {
+      updateTaskContainer();
+    }
+    
+    // Event listeners
+    openTaskFormBtn.addEventListener("click", () => taskForm.classList.remove("hidden"));
+
+    closeTaskFormBtn.addEventListener("click", () => {
+      const formInputsContainValues = titleInput.value || dateInput.value || descriptionInput.value;
+      const formInputValuesUpdated = titleInput.value !== currentTask.title || dateInput.value !== currentTask.date || descriptionInput.value !== currentTask.description;
+
+      if (formInputsContainValues && formInputValuesUpdated) {
+        confirmCloseDialog.showModal();
+      } else {
+        reset();
+      }
+    });
+
+    cancelBtn.addEventListener("click", () => confirmCloseDialog.close());
+
+    discardBtn.addEventListener("click", () => {
+      confirmCloseDialog.close();
+      reset();
+    });
+
+    taskForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      addOrUpdateTask();
+    });
+
+    aiGenerateBtn.addEventListener("click", generateDescription);
+
+  </script>
+</body>
+</html>
